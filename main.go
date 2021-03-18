@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"log"
 	"os"
 	"sort"
 	"strings"
@@ -23,7 +24,6 @@ import (
 	clientnetworkingbeta "istio.io/client-go/pkg/apis/networking/v1beta1"
 	"istio.io/istio/pilot/pkg/util/sets"
 	"istio.io/istio/pkg/test/util/yml"
-	"istio.io/pkg/log"
 )
 
 func getScheme() (*runtime.Scheme, error) {
@@ -50,23 +50,27 @@ func exit(e error) {
 var scheme, _ = getScheme()
 
 func main() {
-	o := log.DefaultOptions()
-	o.OutputPaths = []string{"stderr"}
-	log.Configure(o)
 	if len(os.Args) > 1 {
 		exit(fmt.Errorf("Usage: kubectl get ingresses.extensions,gateways.v1alpha3.networking.istio.io -A -oyaml | " + os.Args[0]))
 	}
 	data, err := ioutil.ReadAll(os.Stdin)
 	exit(err)
+	if err := runMigration(data); err != nil {
+		exit(err)
+	}
+}
+
+func runMigration(data []byte) error {
 	decoder := serializer.NewCodecFactory(scheme, serializer.EnableStrict).UniversalDeserializer()
 	objs := []runtime.Object{}
 	for _, item := range yml.SplitString(string(data)) {
 		obj, _, err := decoder.Decode([]byte(item), nil, nil)
 		if err == io.EOF {
-			log.Infof("eof")
 			break
 		}
-		exit(err)
+		if err != nil {
+			return err
+		}
 		if l, ok := obj.(*v1.List); ok {
 			for _, i := range l.Items {
 				o, err := FromRawToObject(i.Raw)
@@ -91,25 +95,25 @@ func main() {
 		for _, s := range gw.Spec.Servers {
 			if s.GetPort().GetNumber() != 443 {
 				if s.GetPort().GetNumber() != 80 {
-					log.Warnf("Gateway %v server for hosts %v has unsupported port: %v", gw.Name, s.Hosts, s.GetPort().GetNumber())
+					log.Printf("Gateway %v server for hosts %v has unsupported port: %v", gw.Name, s.Hosts, s.GetPort().GetNumber())
 					exitFailure = true
 				}
 				continue
 			}
 			if s.Tls == nil {
-				log.Warnf("Gateway %v server for hosts %v has no TLS settings", gw.Name, s.Hosts, s.GetPort().GetNumber())
+				log.Printf("Gateway %v server for hosts %v has no TLS settings", gw.Name, s.Hosts)
 				exitFailure = true
 				continue
 			}
 			if s.Tls.Mode != networking.ServerTLSSettings_SIMPLE {
-				log.Warnf("Gateway %v server for hosts %v has unsupported TLS mode: %v", gw.Name, s.Hosts, s.Tls.Mode)
+				log.Printf("Gateway %v server for hosts %v has unsupported TLS mode: %v", gw.Name, s.Hosts, s.Tls.Mode)
 				exitFailure = true
 				continue
 			}
 			// add more warnings
 			for _, host := range s.Hosts {
 				if _, f := gwHosts[host]; f {
-					log.Warnf("Gateway %v server for host %v conflicts with another gateway", gw.Name, host)
+					log.Printf("Gateway %v server for host %v conflicts with another gateway", gw.Name, host)
 					exitFailure = true
 				}
 				gwHosts[host] = s.Tls.CredentialName
@@ -142,7 +146,7 @@ func main() {
 		for _, existing := range ing.Spec.TLS {
 			for _, ehost := range existing.Hosts {
 				if wantHosts.Contains(ehost) && foundCreds[ehost] != existing.SecretName {
-					log.Warnf("existing TLS settings for Ingress %q host %q doesn't match expectation. Have %q, expected %q",
+					log.Printf("existing TLS settings for Ingress %q host %q doesn't match expectation. Have %q, expected %q",
 						ing.Name, ehost, existing.SecretName, foundCreds[ehost])
 					exitFailure = true
 				}
@@ -153,12 +157,12 @@ func main() {
 		sort.Strings(hosts)
 		for _, h := range hosts {
 			if foundCreds[h] == "" {
-				log.Warnf("failed to find a matching HTTPS credential for %v/%v; will be HTTP only", ing.Name, h)
+				log.Printf("failed to find a matching HTTPS credential for %v/%v; will be HTTP only", ing.Name, h)
 				exitFailure = true
 				continue
 			}
 			if existing, f := registeredHosts[h]; f {
-				log.Warnf("conflicting TLS host for %q; host %q is the same as from %q; will be HTTP oonly", fmt.Sprintf("%s/%s", ing.Name, ing.Namespace), h, existing)
+				log.Printf("conflicting TLS host for %q; host %q is the same as from %q; will be HTTP oonly", fmt.Sprintf("%s/%s", ing.Name, ing.Namespace), h, existing)
 				exitFailure = true
 				continue
 			}
@@ -177,12 +181,15 @@ func main() {
 		ing.UID = ""
 		ing.CreationTimestamp = metav1.NewTime(time.Time{})
 		b, err := yaml.Marshal(ing)
-		exit(err)
+		if err != nil {
+			return err
+		}
 		fmt.Println("---\n" + string(b))
 	}
 	if exitFailure {
-		exit(fmt.Errorf("failures detected during execution"))
+		return fmt.Errorf("failures detected during execution")
 	}
+	return nil
 }
 
 func dropFirstLabel(s string) string {
