@@ -1,4 +1,4 @@
-module github.com/howardjohn/istio-ingress-migrate
+module github.com/istio-ecosystem/istio-ingress-migrate
 
 go 1.16
 
