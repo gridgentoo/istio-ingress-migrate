@@ -50,6 +50,7 @@ func exit(e error) {
 var scheme, _ = getScheme()
 
 func main() {
+	log.SetOutput(os.Stderr)
 	if len(os.Args) > 1 {
 		exit(fmt.Errorf("Usage: kubectl get ingresses.extensions,gateways.v1alpha3.networking.istio.io -A -oyaml | " + os.Args[0]))
 	}
