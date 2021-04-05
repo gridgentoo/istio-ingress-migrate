@@ -24,7 +24,7 @@ func TestGolden(t *testing.T) {
 				fmt.Println(runMigration(inp))
 			})
 			goldenFile := fmt.Sprintf("testdata/%s.yaml.golden", tt)
-			if true || util.Refresh() {
+			if util.Refresh() {
 				if err := ioutil.WriteFile(goldenFile, []byte(out), 0o644); err != nil {
 					t.Fatal(err)
 				}
