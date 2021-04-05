@@ -47,6 +47,15 @@ func exit(e error) {
 	log.Fatal(e)
 }
 
+const (
+	ErrorUnsupportedPort        = "ERR01"
+	ErrorMissingTLS             = "ERR02"
+	ErrorUnsupportedTLSSettings = "ERR03"
+	ErrorHostConflict           = "ERR04"
+	ErrorExistingTLSMismatch    = "ERR05"
+	ErrorNoCredentialFound      = "ERR06"
+)
+
 var scheme, _ = getScheme()
 
 func main() {
@@ -96,25 +105,25 @@ func runMigration(data []byte) error {
 		for _, s := range gw.Spec.Servers {
 			if s.GetPort().GetNumber() != 443 {
 				if s.GetPort().GetNumber() != 80 {
-					log.Printf("Gateway %v server for hosts %v has unsupported port: %v", gw.Name, s.Hosts, s.GetPort().GetNumber())
+					log.Printf("%v: Gateway %v server for hosts %v has unsupported port: %v", ErrorUnsupportedPort, gw.Name, s.Hosts, s.GetPort().GetNumber())
 					exitFailure = true
 				}
 				continue
 			}
 			if s.Tls == nil {
-				log.Printf("Gateway %v server for hosts %v has no TLS settings", gw.Name, s.Hosts)
+				log.Printf("%v: Gateway %v server for hosts %v has no TLS settings", ErrorMissingTLS, gw.Name, s.Hosts)
 				exitFailure = true
 				continue
 			}
 			if s.Tls.Mode != networking.ServerTLSSettings_SIMPLE {
-				log.Printf("Gateway %v server for hosts %v has unsupported TLS mode: %v", gw.Name, s.Hosts, s.Tls.Mode)
+				log.Printf("%v: Gateway %v server for hosts %v has unsupported TLS mode: %v", ErrorUnsupportedTLSSettings, gw.Name, s.Hosts, s.Tls.Mode)
 				exitFailure = true
 				continue
 			}
-			// add more warnings
+			// TODO: add more warnings
 			for _, host := range s.Hosts {
 				if _, f := gwHosts[host]; f {
-					log.Printf("Gateway %v server for host %v conflicts with another gateway", gw.Name, host)
+					log.Printf("%v: Gateway %v server for host %v conflicts with another gateway", ErrorHostConflict, gw.Name, host)
 					exitFailure = true
 				}
 				gwHosts[host] = s.Tls.CredentialName
@@ -147,8 +156,8 @@ func runMigration(data []byte) error {
 		for _, existing := range ing.Spec.TLS {
 			for _, ehost := range existing.Hosts {
 				if wantHosts.Contains(ehost) && foundCreds[ehost] != existing.SecretName {
-					log.Printf("existing TLS settings for Ingress %q host %q doesn't match expectation. Have %q, expected %q",
-						ing.Name, ehost, existing.SecretName, foundCreds[ehost])
+					log.Printf("%v: existing TLS settings for Ingress %q host %q doesn't match expectation. Have %q, expected %q",
+						ErrorExistingTLSMismatch, ing.Name, ehost, existing.SecretName, foundCreds[ehost])
 					exitFailure = true
 				}
 			}
@@ -158,12 +167,13 @@ func runMigration(data []byte) error {
 		sort.Strings(hosts)
 		for _, h := range hosts {
 			if foundCreds[h] == "" {
-				log.Printf("failed to find a matching HTTPS credential for %v/%v; will be HTTP only", ing.Name, h)
+				log.Printf("%v: failed to find a matching HTTPS credential for %v/%v; will be HTTP only", ErrorNoCredentialFound, ing.Name, h)
 				exitFailure = true
 				continue
 			}
 			if existing, f := registeredHosts[h]; f {
-				log.Printf("conflicting TLS host for %q; host %q is the same as from %q; will be HTTP oonly", fmt.Sprintf("%s/%s", ing.Name, ing.Namespace), h, existing)
+				log.Printf("%v: conflicting TLS host for %q; host %q is the same as from %q; will be HTTP only",
+					ErrorHostConflict, fmt.Sprintf("%s/%s", ing.Name, ing.Namespace), h, existing)
 				exitFailure = true
 				continue
 			}

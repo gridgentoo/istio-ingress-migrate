@@ -24,7 +24,7 @@ spec:
 status:
   loadBalancer: {}
 
-existing TLS settings for Ingress "mismatch-cred" host "beta.example.com" doesn't match expectation. Have "something-else", expected "echo-cred"
+ERR05: existing TLS settings for Ingress "mismatch-cred" host "beta.example.com" doesn't match expectation. Have "something-else", expected "echo-cred"
 ---
 apiVersion: extensions/v1beta1
 kind: Ingress
