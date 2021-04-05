@@ -13,7 +13,13 @@ import (
 )
 
 func TestGolden(t *testing.T) {
-	cases := []string{"input"}
+	cases := []string{
+		"input",
+		"bad-port",
+		"no-tls-443",
+		"host-conflict",
+		"existing",
+	}
 	for _, tt := range cases {
 		t.Run(tt, func(t *testing.T) {
 			inp, err := os.ReadFile(fmt.Sprintf("testdata/%s.yaml", tt))

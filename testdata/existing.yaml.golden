@@ -1,0 +1,54 @@
+---
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  annotations:
+    kubernetes.io/ingress.class: istio
+  creationTimestamp: null
+  name: match-cred
+  namespace: default
+spec:
+  rules:
+  - host: alpha.example.com
+    http:
+      paths:
+      - backend:
+          serviceName: echo
+          servicePort: 80
+        path: /*
+        pathType: ImplementationSpecific
+  tls:
+  - hosts:
+    - alpha.example.com
+    secretName: echo-cred
+status:
+  loadBalancer: {}
+
+existing TLS settings for Ingress "mismatch-cred" host "beta.example.com" doesn't match expectation. Have "something-else", expected "echo-cred"
+---
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  annotations:
+    kubernetes.io/ingress.class: istio
+  creationTimestamp: null
+  name: mismatch-cred
+  namespace: default
+spec:
+  rules:
+  - host: beta.example.com
+    http:
+      paths:
+      - backend:
+          serviceName: echo
+          servicePort: 80
+        path: /*
+        pathType: ImplementationSpecific
+  tls:
+  - hosts:
+    - beta.example.com
+    secretName: echo-cred
+status:
+  loadBalancer: {}
+
+failures detected during execution
