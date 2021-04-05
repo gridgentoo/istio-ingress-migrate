@@ -3,7 +3,7 @@ SHELL := /bin/bash
 GOBIN ?= $(GOPATH)/bin
 MODULE = github.com/istio-ecosystem/istio-ingress-migrate
 HUB ?= gcr.io/istio-release
-VERSION ?= 0.0.1
+VERSION ?= 0.0.2
 export GO111MODULE ?= on
 
 .PHONY: format
